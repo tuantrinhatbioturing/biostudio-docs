@@ -3,4 +3,5 @@
 .obsidian/plugins/
 
 */.obsidian/
+*/.DS_Store
 .DS_Store
