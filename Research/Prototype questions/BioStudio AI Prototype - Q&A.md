@@ -1,9 +1,11 @@
 # BioStudio AI Prototype - Questions & Answers
 
-Date: 2026-05-08
+Date: 2026-05-08 (updated 2026-05-11)
 Context: Interactive prototype development for BioStudio AI product direction inspired by bio.xyz chat
 
 ---
+
+# Phần 1: Research Panel — 8 Tabs
 
 ## Q1: Nội dung ở Tab Data ở Right panel là gì?
 
@@ -123,6 +125,8 @@ Nội dung này xuất hiện trong **AI chat** khi người dùng upload dữ l
 | **Prediction** | Predictions với Confidence, Evidence, Caveats |
 | **Report** | Auto-generated manuscript + Export MD/DOCX |
 | **Next Steps** | Recommended actions với Priority (High/Medium/Low) |
+
+---
 
 ## Q4: Tab Overview có những gì? Objective, Hypothesis, Confidence là gì?
 
@@ -340,12 +344,12 @@ Tab Next Steps đề xuất các **hành động tiếp theo** để validation 
 
 | Priority | Action | Tool |
 |---|---|---|
-| **HIGH** 🔴 | Run batch correction on bulk RNA-seq data | BBrowserX Pro |
-| **HIGH** 🔴 | Validate exhaustion markers by flow cytometry | Experiment |
-| **MEDIUM** 🟡 | Perform cell-cell communication analysis | CellChat via BioStudio |
-| **MEDIUM** 🟡 | Run trajectory/pseudotime analysis on CD8+ T cells | BioStudio notebook |
-| **MEDIUM** 🟡 | Build treatment response classifier | BioStudio ML notebook |
-| **LOW** ⚪ | Search Talk2Data for cohorts with similar profiles | Talk2Data |
+| **HIGH** | Run batch correction on bulk RNA-seq data | BBrowserX Pro |
+| **HIGH** | Validate exhaustion markers by flow cytometry | Experiment |
+| **MEDIUM** | Perform cell-cell communication analysis | CellChat via BioStudio |
+| **MEDIUM** | Run trajectory/pseudotime analysis on CD8+ T cells | BioStudio notebook |
+| **MEDIUM** | Build treatment response classifier | BioStudio ML notebook |
+| **LOW** | Search Talk2Data for cohorts with similar profiles | Talk2Data |
 
 #### Phân loại Priority:
 - **HIGH (Đỏ):** Cần làm **ngay** — thiếu bước này kết luận không đáng tin. Ví dụ: batch correction trước DEG.
@@ -379,7 +383,244 @@ Mỗi action có nút **"Run in [tool]"**. Click mở đúng công cụ với co
 
 ---
 
-## Đường dẫn Source Code
+# Phần 2: Nguồn dữ liệu & Cơ chế trích dẫn
+
+## Q11: Các bài viết trong Literature tab lấy từ đâu?
+
+### Trả lời:
+
+Trong prototype hiện tại, tất cả bài viết trong Literature tab là **hardcoded mock data** — không gọi API hay nguồn bên ngoài nào.
+
+- **File nguồn:** `app/data/mockData.ts` — dòng 518–694, hằng số `literatureRefs` (kiểu `Record<string, LiteratureRef[]>`), keyed theo research thread ID (`rt-1` đến `rt-5`)
+- Ví dụ bài *"Single-cell profiling reveals immune suppression in anti-PD-1 resistant melanoma"* được định nghĩa tại dòng 521, thuộc mảng `literatureRefs['rt-1']`
+
+**Luồng dữ liệu:**
+1. `page.tsx` set `selectedThreadId` mặc định = `'rt-1'`
+2. `ResearchPanel.tsx:48` và `AIAssistantPanel.tsx:114` resolve: `literatureRefs[selectedThreadId]`
+3. Render trực tiếp — không có `fetch`, `axios`, API route, hay service layer nào
+
+Trong sản phẩm thực tế, Literature papers sẽ lấy từ **PubMed** và **Talk2Data** (xem Q14, Q15).
+
+---
+
+## Q12: Talk2Data được sử dụng như thế nào trong prototype?
+
+### Trả lời:
+
+Trong prototype, Talk2Data xuất hiện dưới dạng **concept/mock** — không có tích hợp API thật, nhưng thể hiện rõ **vai trò sản phẩm** mà Talk2Data sẽ đóng.
+
+Talk2Data xuất hiện ở 4 vị trí trong mock data:
+
+| Vị trí (mockData.ts) | Cách dùng | Ví dụ |
+|---|---|---|
+| Dòng 208, 222, 265, 367 | **Workflow steps**: AI báo đang search Talk2Data | "Searching Talk2Data for similar studies" |
+| Dòng 232, 244, 283, 295 | **Chat AI responses**: AI trả lời có đề cập Talk2Data | "Similar profiles in Talk2Data: GSE123813, GSE145286" |
+| Dòng 1129, 1135, 1143, 1149 | **Next Steps**: action gắn `tool: 'Talk2Data'` | "Search Talk2Data for cohorts with similar profiles" |
+| Dòng 1169–1200 | **Evidence items**: `source: 'Talk2Data'` cho các cohort | GSE123813, GSE145286, GSE78220, GSE176021, GSE176077 |
+
+**Lưu ý:** Literature tab KHÔNG dùng Talk2Data — các bài viết trong Literature là academic paper references riêng (xem Q5).
+
+---
+
+## Q13: Data validation / Cohort matching là gì? (Giải thích cho người không chuyên sinh học)
+
+### Trả lời:
+
+**Cohort** = một nhóm người tham gia nghiên cứu (ví dụ: 6 bệnh nhân melanoma không đáp ứng thuốc anti-PD-1).
+
+**Cohort matching** = AI tìm các nghiên cứu khác đã công khai có **nhóm bệnh nhân tương tự** với dữ liệu của bạn, để xem kết quả có khớp không.
+
+**Ví dụ thực tế:**
+
+Bạn phân tích dữ liệu của mình → phát hiện: *"Bệnh nhân không đáp ứng thuốc có nhiều T cell bị exhaustion"*. Nhưng bạn chưa chắc kết quả này đáng tin hay chỉ là ngẫu nhiên.
+
+AI quay sang Talk2Data (kho dữ liệu hàng ngàn nghiên cứu công khai) → tìm ra: *"Có 2 nghiên cứu khác (GSE123813, GSE145286) cũng có nhóm bệnh nhân tương tự → họ cũng thấy T cell exhaustion ở nhóm không đáp ứng. Độ tương đồng 62-67%."*
+
+**Data validation** = bước **kiểm chứng** đó — đối chiếu kết quả của bạn với dữ liệu bên ngoài để xem có nhất quán không, thay vì chỉ tin kết quả của riêng mình.
+
+**Tương tự:** Giống bạn viết 1 phân tích tài chính cho công ty A, rồi so sánh với báo cáo của 5 công ty tương tự trong ngành → nếu kết quả khớp thì đáng tin hơn.
+
+---
+
+## Q14: Trong thực tế sản phẩm, Literature papers sẽ lấy từ đâu?
+
+### Trả lời:
+
+Literature tab sẽ lấy từ **2 nguồn chính**:
+
+| Nguồn | Mục đích | Cách hoạt động |
+|---|---|---|
+| **PubMed** | Tìm papers theo gene/pathway/disease keywords | AI rút ra keywords từ kết quả phân tích → query PubMed E-utilities API → trả về metadata (title, authors, year, DOI, abstract) → tính relevance score |
+| **Talk2Data** | Papers gắn liền với cohort đã match | Mỗi dataset trên Talk2Data có paper gốc đi kèm. Khi AI match được cohort → kéo luôn paper reference từ metadata |
+
+**Luồng sản phẩm khả thi nhất:**
+```
+AI phân tích xong
+  → Rút ra gene/pathway keywords (PDCD1, melanoma, anti-PD-1 resistance)
+  → Search PubMed bằng keywords → nhận papers liên quan
+  → Match cohort trên Talk2Data → nhận papers gốc của dataset
+  → Gộp kết quả → tính relevance score → hiển thị trong Literature tab
+```
+
+---
+
+## Q15: Reference papers có thể đến từ Talk2Data không?
+
+### Trả lời:
+
+**Có.** Mỗi dataset trên Talk2Data (như GSE123813) đều gắn với paper gốc công bố dataset đó. Nên khi AI match được cohort → kéo luôn paper reference từ Talk2Data metadata.
+
+Literature tab có **2 nguồn papers song song:**
+1. **PubMed** — papers tìm được theo gene/pathway/disease keywords
+2. **Talk2Data** — papers gắn với cohorts mà AI đã match (paper gốc của dataset)
+
+---
+
+## Q16: PubMed có open source không? Cách dùng DOI/title để query?
+
+### Trả lời:
+
+### PubMed có miễn phí không?
+
+**PubMed miễn phí**, nhưng phân biệt 2 thứ:
+
+| | PubMed | PubMed Central (PMC) |
+|---|---|---|
+| **Là gì** | Database metadata (title, authors, abstract) | Repository full-text bài báo |
+| **Miễn phí** | Có, hoàn toàn | Chỉ bài open access |
+| **API** | E-utilities API, free, rate limit 3 req/s (10 req/s nếu có key) | Cùng API |
+
+→ **Metadata (title, abstract, authors, DOI) thì lấy được miễn phí**. Full-text thì tùy bài có open access hay không.
+
+### Dùng DOI/title để query — cách thức cụ thể
+
+PubMed cung cấp **E-utilities API** (REST), 2 endpoint chính:
+
+**ESearch** — tìm paper → trả về PubMed ID (PMID):
+```
+GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=10.1016/j.cell.2018.09.006[doi]
+GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term="single-cell profiling melanoma"[title]
+```
+
+**EFetch** — lấy metadata từ PMID:
+```
+GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=30249613&rettype=abstract
+```
+
+**Luồng thực tế trong sản phẩm:**
+```
+AI phân tích → rút ra keywords (PDCD1, melanoma, anti-PD-1 resistance)
+    → ESearch PubMed bằng keywords
+    → nhận PMIDs
+    → EFetch metadata (title, authors, year, journal, DOI, abstract)
+    → tính relevance score
+    → hiển thị trong Literature tab
+```
+
+Nói ngắn gọn: **gọi API kiểu REST, truyền DOI hoặc title làm tham số search → nhận lại metadata bài báo**.
+
+---
+
+## Q17: DOI link trong Literature tab có nghĩa là gì?
+
+### Trả lời:
+
+**DOI** = **Digital Object Identifier** — mã định danh duy nhất cho mỗi bài báo khoa học (giống số CMND của bài báo).
+
+Ví dụ: `10.1016/j.cell.2018.09.006` → trỏ đến bài *"Single-cell profiling reveals immune suppression in anti-PD-1 resistant melanoma"* trên tạp chí Cell.
+
+**Nút DOI trong UI** (ResearchPanel.tsx dòng 181-184): khi click sẽ mở link ngoài (icon external link) đến trang bài báo gốc — thường là `https://doi.org/10.1016/j.cell.2018.09.006`.
+
+**Tóm lại:** DOI link = **shortcut để người dùng click → mở thẳng bài báo gốc trên web**. Chức năng đơn giản, chỉ là external link, không phải action phức tạp trong app.
+
+---
+
+# Phần 3: Evidence Tab — Chi tiết
+
+## Q18: Con số % (confidence) trong Evidence card có ý nghĩa gì?
+
+### Trả lời:
+
+Đó là **confidence score** — độ tin cậy của AI đối với evidence đó.
+
+Trong mock data:
+```ts
+confidence: 0.91  // → hiển thị 91%
+```
+
+**Ý nghĩa:** AI đánh giá mức độ chắc chắn rằng evidence này là đúng/quan trọng, dựa trên:
+- **Statistical significance** — p-value/FDR thấp → tin cậy cao
+- **Consistency** — kết quả có nhất quán với nhiều cohort không
+- **Biological plausibility** — có giải thích sinh học hợp lý không
+
+**Ví dụ so sánh:**
+
+| Evidence | Confidence | Lý do |
+|---|---|---|
+| PDCD1 (PD-1) log2FC=3.42 | **95%** | p-value cực thấp, marker đã biết rõ |
+| T cell exhaustion pathway | **91%** | GSEA mạnh, FDR thấp |
+| GSE176021 (cohort NSCLC) | **61%** | Cohort khác bệnh (melanoma vs NSCLC), chỉ similar pattern |
+
+→ Con số này giúp user **ưu tiên** evidence nào đáng tin nhất để đưa vào kết luận, thay vì tự đánh giá từng p-value/FDR thủ công.
+
+---
+
+## Q19: Các thông tin trong mỗi card Evidence tab là gì?
+
+### Trả lời:
+
+Mỗi card trong Evidence tab có cấu trúc:
+
+```
+┌─────────────────────────────────────┐
+│ T cell exhaustion              91%  │  ← name + confidence
+│ GSEA NES=2.34, FDR q-val=0.0012    │  ← description
+│ Source: fgsea (GO BP)              │  ← source
+│ Enriched in NR                     │  ← value
+└─────────────────────────────────────┘
+```
+
+Giải thích từng field:
+
+| Field | Là gì | Ví dụ |
+|---|---|---|
+| **Name** | Tên gene/cell type/pathway/cohort | PDCD1 (PD-1), GSE123813 |
+| **Confidence (%)** | Độ tin cậy AI đánh giá (0–1 → %) | 95%, 61% |
+| **Description** | Tóm tắt kết quả + thống kê | log2FC=3.42, p-adj<1e-50 |
+| **Source** | Phương pháp/tool sinh ra evidence này | fgsea (GO BP), DEG analysis (Wilcoxon), Talk2Data |
+| **Value** | Kết luận ngắn về direction | Up in NR, Jaccard similarity=0.62 |
+
+**Source** phản ánh xuất xứ — đến từ phân tích nào:
+
+| Source | Nghĩa |
+|---|---|
+| `DEG analysis (Wilcoxon)` | Gene khác biệt — test thống kê Wilcoxon |
+| `fgsea (GO BP)` | Pathway enrichment — fast GSEA trên Gene Ontology |
+| `Cell annotation (SingleR)` | Gán tên cell type — tool SingleR |
+| `CellChat analysis` | Tương tác cell-cell — tool CellChat |
+| `CITE-seq (ADT)` | Dữ liệu protein — antibody-derived tag |
+| `Talk2Data` | Cohort match từ Talk2Data |
+| `Notebook cell 6` | Output từ cell trong notebook |
+
+**Value** là kết luận direction — "Up in NR" = tăng ở nhóm không đáp ứng, "Enriched in NR" = giàu ở nhóm không đáp ứng.
+
+---
+
+# Phần 4: Tóm tắt — Talk2Data vai trò trong sản phẩm
+
+## 2 cơ chế trích dẫn nguồn
+
+| | Talk2Data | Literature (PubMed) |
+|---|---|---|
+| **Trích dẫn gì** | Cohorts/datasets (GSE IDs) | Papers (DOI) |
+| **Mục đích** | Cross-study validation, tìm profile tương tự | Tham khảo học thuật |
+| **AI dùng khi nào** | Validate hypothesis, so sánh kết quả | Gợi ý reading, background |
+| **Output** | Jaccard similarity + confidence | Relevance score + DOI link |
+| **Xuất hiện ở đâu** | Evidence tab (source), Chat responses, Next Steps, Workflow steps | Literature tab |
+
+---
+
+# Phụ lục: Đường dẫn Source Code
 
 Prototype được lưu tại:
 ```
@@ -390,5 +631,6 @@ File chính:
 - `app/page.tsx` - Layout chính
 - `app/components/ChatArea.tsx` - Chat + Charts
 - `app/components/ResearchPanel.tsx` - Right Panel 8 tabs
+- `app/components/AIAssistantPanel.tsx` - AI Assistant Panel (notebook view)
 - `app/components/JupyterNotebook.tsx` - Notebook Editor
-- `app/data/mockData.ts` - Mock data
+- `app/data/mockData.ts` - Mock data (tất cả dữ liệu hiện tại đều hardcoded ở đây)
